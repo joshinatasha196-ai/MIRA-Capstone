@@ -1,0 +1,400 @@
+{
+  "name": "Agent MIRA",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -512,
+        -80
+      ],
+      "id": "d14c2372-500a-4a8f-8d29-3d50ab8e8a2c",
+      "name": "When clicking ‘Execute workflow’"
+    },
+    {
+      "parameters": {
+        "jsCode": "const BASE = 'https://raw.githubusercontent.com/joshinatasha196-ai/MIRA-Capstone/refs/heads/main/data/';\nconst files = [\n  { dataset: 'tasks',       type: 'csv',  file: 'sample_task_board.csv' },\n  { dataset: 'timeline',    type: 'csv',  file: 'project_timeline.csv' },\n  { dataset: 'risks',       type: 'csv',  file: 'project_risks.csv' },\n  { dataset: 'description', type: 'text', file: 'project_description.txt' }\n];\nreturn files.map(f => ({ json: { ...f, url: BASE + f.file } }));"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -304,
+        -80
+      ],
+      "id": "cbd52356-04f0-4202-94a8-994c362a38be",
+      "name": "File list"
+    },
+    {
+      "parameters": {
+        "url": "={{ $json.url }}",
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "text"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -128,
+        -80
+      ],
+      "id": "d1ff6e5b-2b16-4006-9a05-96b3c53bc1d2",
+      "name": "Fetch all files"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node name: Parse all      Type: Code      Mode: Run Once for All Items\n// Sits after ONE HTTP Request node (URL = {{ $json.url }}, Response Format = Text, field = data).\n// Turns each downloaded file into rows tagged with \"dataset\", using the File list for the labels.\nconst list = $('File list').all().map(i => i.json);\nconst inputs = $input.all();\nif (inputs.length !== list.length) throw new Error(`Expected ${list.length} downloads, got ${inputs.length}. Check the HTTP Request node.`);\n\nconst parseCSV = (raw) => {\n  const text = String(raw || '').replace(/^\\uFEFF/, '');\n  const rows = []; let row = [], cur = '', q = false;\n  for (let i = 0; i < text.length; i++) {\n    const c = text[i];\n    if (q) { if (c === '\"' && text[i + 1] === '\"') { cur += '\"'; i++; } else if (c === '\"') q = false; else cur += c; }\n    else if (c === '\"') q = true;\n    else if (c === ',') { row.push(cur); cur = ''; }\n    else if (c === '\\n' || c === '\\r') { if (c === '\\r' && text[i + 1] === '\\n') i++; row.push(cur); cur = ''; if (row.length > 1 || row[0] !== '') rows.push(row); row = []; }\n    else cur += c;\n  }\n  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }\n  const header = (rows[0] || []).map(h => h.trim());\n  return rows.slice(1).map(r => Object.fromEntries(header.map((h, i) => [h, (r[i] ?? '').trim()])));\n};\n\nconst out = [];\ninputs.forEach((item, i) => {\n  const meta = list[i], raw = item.json.data;\n  if (typeof raw !== 'string' || /^\\s*<!DOCTYPE html/i.test(raw)) {\n    throw new Error(`${meta.file} returned a web page, not the file. Check that its URL is a raw.githubusercontent.com URL.`);\n  }\n  if (meta.type === 'csv') {\n    const rows = parseCSV(raw);\n    if (!rows.length) throw new Error(`${meta.file} has no data rows`);\n    rows.forEach(r => out.push({ json: { dataset: meta.dataset, ...r } }));\n  } else {\n    out.push({ json: { dataset: meta.dataset, data: raw } });\n  }\n});\nreturn out;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        64,
+        -80
+      ],
+      "id": "7a285681-8ed2-44b1-bfc0-c6de7c23c2bf",
+      "name": "Parse all"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "3ca851ee-ced4-414b-b265-3439ad8b7f59",
+              "leftValue": "={{ $json.dataset }}",
+              "rightValue": "=tasks",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.4,
+      "position": [
+        288,
+        -272
+      ],
+      "id": "b15e6ed5-a4b2-4fa3-9c9c-6668c231bd0a",
+      "name": "Load tasks"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "3ca851ee-ced4-414b-b265-3439ad8b7f59",
+              "leftValue": "={{ $json.dataset }}",
+              "rightValue": "=timeline",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.4,
+      "position": [
+        304,
+        -96
+      ],
+      "id": "5903a7dd-520c-476b-870d-b1511348ef78",
+      "name": "Load timeline"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "3ca851ee-ced4-414b-b265-3439ad8b7f59",
+              "leftValue": "={{ $json.dataset }}",
+              "rightValue": "=risks",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.4,
+      "position": [
+        320,
+        80
+      ],
+      "id": "f0f9fab3-7648-40c5-b3e9-85759074af81",
+      "name": "Load risks"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "3ca851ee-ced4-414b-b265-3439ad8b7f59",
+              "leftValue": "={{ $json.dataset }}",
+              "rightValue": "=description",
+              "operator": {
+                "type": "string",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.filter",
+      "typeVersion": 2.4,
+      "position": [
+        352,
+        256
+      ],
+      "id": "33692ec8-e68e-4a7f-812b-4da941e51bce",
+      "name": "Load description"
+    },
+    {
+      "parameters": {
+        "numberInputs": 4
+      },
+      "type": "n8n-nodes-base.merge",
+      "typeVersion": 3.2,
+      "position": [
+        608,
+        -128
+      ],
+      "id": "5a58c26b-9073-495a-97f0-095adf9e34e9",
+      "name": "Merge data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node name: Config      Type: Code      Mode: Run Once for All Items\n// One place for every tunable value. Change values here, not inside the other nodes.\nreturn [{\n  json: {\n    as_of_date: '2026-04-22',          // fixed test date (do not use the system clock for evaluation)\n    project_start_date: '2026-03-30',  // Monday of week 1, inferred from task due dates\n    at_risk_days: 7,                   // \"due soon\" threshold for tasks and phases\n    window_days: 14,                   // default look-ahead for upcoming milestones\n    top_n_risks: 3,\n\n    // Task label -> timeline phase number. Security and Compliance are cross-cutting (no phase).\n    label_to_phase: {\n      'Planning': 1, 'Analysis': 2, 'Use Cases': 3, 'Data Prep': 4, 'Model Dev': 4,\n      'Pilot': 5, 'Evaluation': 6, 'Deployment': 7, 'Monitoring': 8\n    },\n\n    // Risk category (exact text from project_risks.csv) -> task labels that give evidence for it.\n    // ASSUMPTION: please review. Categories with no clear label simply score 0.\n    label_to_risk_category: {\n      'Data Quality & Availability': ['Analysis', 'Data Prep'],\n      'Integration Issues': ['Deployment', 'Pilot'],\n      'Ethical & Legal Concerns': ['Compliance'],\n      'Model Performance Drift': ['Monitoring', 'Evaluation'],\n      'Security Vulnerabilities': ['Security']\n    },\n\n    // Each task counts once, at its highest applicable weight.\n    risk_weights: { blocked: 3, overdue: 2, in_progress: 1 }\n  }\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        832,
+        -128
+      ],
+      "id": "6d64fff5-cced-4a01-b3ac-9e604ba0a0df",
+      "name": "Config"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node name: Validate data      Type: Code      Mode: Run Once for All Items\n// Checks the three CSVs before anything else runs. Route on {{ $json.ok }} with an IF node.\nconst tasks = $('Load tasks').all().map(i => i.json);\nconst phases = $('Load timeline').all().map(i => i.json);\nconst risks = $('Load risks').all().map(i => i.json);\n\nconst errors = [], warnings = [];\nconst need = {\n  tasks: ['task_id', 'task_name', 'status', 'assignee', 'priority', 'sprint', 'due_date', 'labels', 'description'],\n  phases: ['phase', 'phase_name', 'start_week', 'end_week', 'key_activities', 'milestones_deliverables'],\n  risks: ['risk_id', 'category', 'risk_challenge', 'impact', 'mitigation_strategy']\n};\nconst checkCols = (name, rows) => {\n  if (!rows.length) { errors.push(`${name}: no rows found`); return; }\n  const miss = need[name].filter(c => !(c in rows[0]));\n  if (miss.length) errors.push(`${name}: missing columns ${miss.join(', ')}`);\n};\ncheckCols('tasks', tasks); checkCols('phases', phases); checkCols('risks', risks);\n\nconst okStatus = ['Done', 'In Progress', 'Blocked', 'To Do'];\nconst seen = new Set();\nfor (const t of tasks) {\n  if (seen.has(t.task_id)) errors.push(`duplicate task_id ${t.task_id}`);\n  seen.add(t.task_id);\n  if (!okStatus.includes(t.status)) errors.push(`${t.task_id}: unknown status \"${t.status}\"`);\n  if (!/^\\d{4}-\\d{2}-\\d{2}$/.test(t.due_date || '') || isNaN(Date.parse(t.due_date))) errors.push(`${t.task_id}: invalid due_date \"${t.due_date}\"`);\n  if (!/^Sprint \\d+$/.test(t.sprint || '')) warnings.push(`${t.task_id}: unexpected sprint value \"${t.sprint}\"`);\n}\nfor (const p of phases) {\n  if (!(Number(p.start_week) >= 1) || Number(p.end_week) < Number(p.start_week)) errors.push(`phase ${p.phase}: bad week range`);\n}\nconst rid = new Set();\nfor (const r of risks) { if (rid.has(r.risk_id)) errors.push(`duplicate risk_id ${r.risk_id}`); rid.add(r.risk_id); }\n\nreturn [{ json: {\n  ok: errors.length === 0, has_task_data: tasks.length > 0,\n  errors, warnings,\n  counts: { tasks: tasks.length, phases: phases.length, risks: risks.length }\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1056,
+        -128
+      ],
+      "id": "5366a190-864b-422b-b839-c262961e2cdd",
+      "name": "Validate data"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Node name: Status engine      Type: Code      Mode: Run Once for All Items\n// Needs upstream nodes named: Load tasks, Config. Optional: Gate (reads gate.sprint).\n// Handles T5, T8, T10, T12. No LLM is involved.\nconst cfg = $('Config').first().json;\nlet gate = {};\ntry { const j = $('Gate').first().json; gate = j.output || j; } catch (e) { /* gate not run: whole project */ }\n\nconst tasks = $('Load tasks').all().map(i => i.json);\nconst STATUSES = ['Done', 'In Progress', 'Blocked', 'To Do'];\nconst DAY = 86400000;\nconst day = s => Date.parse(s + 'T00:00:00Z');\nconst asOf = day(cfg.as_of_date);\n\nconst m = String(gate.sprint || '').match(/(\\d+)/);\nconst sprint = m ? `Sprint ${parseInt(m[1], 10)}` : null;\nconst sprintFound = sprint ? tasks.some(t => t.sprint === sprint) : true;\n\nconst enrich = t => {\n  const d = Math.round((day(t.due_date) - asOf) / DAY);\n  const overdue = t.status !== 'Done' && d < 0;\n  const dueSoon = t.status === 'To Do' && d >= 0 && d <= cfg.at_risk_days;\n  const reasons = [];\n  if (t.status === 'Blocked') reasons.push(`Blocked. Source note: ${t.description}`);\n  if (overdue) reasons.push(`Overdue by ${-d} day(s): due ${t.due_date}, status ${t.status}`);\n  if (dueSoon) reasons.push(`Due in ${d} day(s) and not started`);\n  return { task_id: t.task_id, task_name: t.task_name, assignee: t.assignee, status: t.status,\n    sprint: t.sprint, due_date: t.due_date, days_to_due: d, overdue, due_soon: dueSoon, reasons };\n};\nconst countBy = rows => {\n  const c = Object.fromEntries(STATUSES.map(s => [s, 0]));\n  for (const r of rows) c[r.status] = (c[r.status] || 0) + 1;\n  return c;\n};\n\nconst all = tasks.map(enrich);\nconst scope = sprint ? all.filter(t => t.sprint === sprint) : all;\nconst inScopeIds = new Set(scope.map(t => t.task_id));\n\nconst byStatus = Object.fromEntries(STATUSES.map(s => [s, scope.filter(t => t.status === s)]));\nconst atRisk = scope.filter(t => t.reasons.length);\nconst blocked = scope.filter(t => t.status === 'Blocked');\nconst overdue = scope.filter(t => t.overdue);\nconst dueSoon = scope.filter(t => t.due_soon);\n\n// Health rule (proposed): Red = any blocked or 2+ overdue; Amber = any overdue or due-soon; else Green.\nconst health = blocked.length || overdue.length >= 2 ? 'Red' : (overdue.length || dueSoon.length ? 'Amber' : 'Green');\nconst counts = countBy(scope);\n\nreturn [{ json: {\n  as_of_date: cfg.as_of_date,\n  scope: { type: sprint ? 'sprint' : 'project', sprint: sprint, sprint_found: sprintFound },\n  total: scope.length,\n  counts,\n  completion_pct: scope.length ? Math.round(counts['Done'] / scope.length * 100) : 0,\n  health, health_rule: 'Red: any Blocked task or 2+ overdue. Amber: any overdue or To Do task due within ' + cfg.at_risk_days + ' days. Otherwise Green.',\n  tasks_by_status: byStatus,\n  blocked: blocked.map(t => t.task_id),\n  overdue: overdue.map(t => t.task_id),\n  at_risk: atRisk,\n  upcoming_tasks: scope.filter(t => t.status !== 'Done' && t.days_to_due >= 0 && t.days_to_due <= cfg.window_days),\n  project_counts: countBy(all),\n  // Used by the Grounding check: what the output may and may not mention.\n  scope_task_ids: [...inScopeIds],\n  out_of_scope_names: sprint ? all.filter(t => !inScopeIds.has(t.task_id)).map(t => t.task_name) : []\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1264,
+        -128
+      ],
+      "id": "e4e9f3ca-ae85-4809-a18f-8b3d1e85632c",
+      "name": "Status engine"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "When clicking ‘Execute workflow’": {
+      "main": [
+        [
+          {
+            "node": "File list",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "File list": {
+      "main": [
+        [
+          {
+            "node": "Fetch all files",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Fetch all files": {
+      "main": [
+        [
+          {
+            "node": "Parse all",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse all": {
+      "main": [
+        [
+          {
+            "node": "Load tasks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load timeline",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load risks",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Load description",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load tasks": {
+      "main": [
+        [
+          {
+            "node": "Merge data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Load timeline": {
+      "main": [
+        [
+          {
+            "node": "Merge data",
+            "type": "main",
+            "index": 1
+          }
+        ]
+      ]
+    },
+    "Load risks": {
+      "main": [
+        [
+          {
+            "node": "Merge data",
+            "type": "main",
+            "index": 2
+          }
+        ]
+      ]
+    },
+    "Load description": {
+      "main": [
+        [
+          {
+            "node": "Merge data",
+            "type": "main",
+            "index": 3
+          }
+        ]
+      ]
+    },
+    "Merge data": {
+      "main": [
+        [
+          {
+            "node": "Config",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Config": {
+      "main": [
+        [
+          {
+            "node": "Validate data",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate data": {
+      "main": [
+        [
+          {
+            "node": "Status engine",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "b22f95ff-2298-4fbd-907b-95b59497f323",
+  "meta": {
+    "instanceId": "5ea88e89b4b554387f5bc090a717ba97532e853baf2531c2090d7ef9af71432f"
+  },
+  "nodeGroups": [],
+  "id": "fyrh3hg8fF8rE7TR",
+  "tags": []
+}
